@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+# Never commit manufacturer binaries or decompiled sources:
+*.apk
+*.dex
+*.dll
+decompiled/
