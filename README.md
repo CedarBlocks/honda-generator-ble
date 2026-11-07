@@ -28,26 +28,12 @@ Everything here was derived by **clean-room documentation of a device's own
 protocol for interoperability**. This repository contains **no** manufacturer source
 code and **no** app binaries — only facts about the wire protocol and original code.
 
-## ⚠️ Safety — read this first
+## Before you start one remotely
 
-A generator is not a light bulb. Starting one remotely, or over a link that bypasses
-the generator's own remote-start wiring, moves real safety responsibility into
-*your* software.
-
-- **Carbon monoxide kills.** Never start a generator remotely unless you are certain
-  its exhaust is vented safely and no one could be working on it. Honda's built-in
-  CO-MINDER shutoff still runs (it is internal to the engine), but your software must
-  not become a way to start an engine in an unsafe state.
-- **This path bypasses the wired remote-start interface.** Honda's remote-start port
-  ("close to run" + start pulse) keeps the manufacturer's hardware in the safety
-  loop. The BLE path does not. If you start over BLE, *you* own crank limiting,
-  run-confirmation, maximum-runtime, and a physical override.
-- **Default to read-only.** Reading fuel level, output, and run hours over BLE is
-  low-risk and genuinely useful. Treat remote *start* as a separate, deliberate step
-  gated behind local safety interlocks and a human who can see the generator.
-- **Test start/stop only with someone standing at the machine.**
-
-You accept all risk of using this software. See `LICENSE`.
+Remote-starting an engine over BLE bypasses the wired remote-start interface, so
+crank limiting, run-time limits, and an override are on you. Carbon monoxide kills —
+only start a generator whose exhaust is safely vented. You accept all risk of using
+this software; see `LICENSE`.
 
 ## The protocol in one screen
 
