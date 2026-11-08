@@ -103,6 +103,8 @@ const CAN_IDS = { "ECU status 0x312": 0x312, "Inverter status 0x322": 0x322, "In
 const $ = id => document.getElementById(id);
 let server = null, svc = {};
 
+const why = e => !e ? "no detail" : typeof e === "string" ? e :
+  [e.name, e.message, e.code].filter(Boolean).join(": ") || JSON.stringify(e) || String(e);
 const hex = buf => [...new Uint8Array(buf.buffer || buf)].map(b => b.toString(16).padStart(2, "0")).join(" ");
 const text = buf => { try { return new TextDecoder().decode(buf); } catch { return ""; } };
 function log(msg) {
@@ -158,11 +160,11 @@ async function connect(all) {
           const p = c.properties;
           return c.uuid.slice(0, 8) + "[" + ["read", "write", "writeWithoutResponse", "notify", "indicate"].filter(k => p[k]).map(k => k[0] + (k === "writeWithoutResponse" ? "n" : "")).join("") + "]";
         }).join(" "));
-      } catch (e) { log(`  ${name}: couldn't list (${e.message})`); }
+      } catch (e) { log(`  ${name}: couldn't list (${why(e)})`); }
     }
     setReady(true);
     log(svc.btu ? "BT-unit (Z45A) model: unlock uses 92CD0002" : "classic model: unlock uses 066B0006");
-  } catch (e) { log(`connect: ${e.message}`); }
+  } catch (e) { log(`connect: ${why(e)}`); }
 }
 
 async function unlock() {
@@ -170,14 +172,14 @@ async function unlock() {
   if (!ch) { log("unlock characteristic not found"); return; }
   const bytes = unlockBytes();
   try { await write(ch, bytes); log(`unlock written (${hex(bytes).slice(0, 2)} + code): accepted, no error`); }
-  catch (e) { log(`unlock refused: ${e.message}`); }
+  catch (e) { log(`unlock refused: ${why(e)}`); }
 }
 
 async function readOne(service, id, label, asText) {
   const ch = await char(service, id);
   if (!ch) return;
   try { const v = await ch.readValue(); log(`${label}: ${hex(v)}${asText ? `  "${text(v)}"` : ""}`); return v; }
-  catch (e) { log(`${label}: read failed (${e.message})`); }
+  catch (e) { log(`${label}: read failed (${why(e)})`); }
 }
 
 async function readAll() {
@@ -202,7 +204,7 @@ async function listen() {
       if (label === "drive" && v.byteLength) $("state").textContent = STATES[v.getUint8(0)] || `code ${v.getUint8(0)}`;
     };
     try { ch.addEventListener("characteristicvaluechanged", on); await ch.startNotifications(); subs.push([ch, on]); log(`listening: ${label}`); }
-    catch (e) { log(`listen ${label}: ${e.message}`); }
+    catch (e) { log(`listen ${label}: ${why(e)}`); }
   }
   $("listen").disabled = true;
   await new Promise(r => setTimeout(r, 20000));
@@ -215,7 +217,7 @@ async function ask(id) {
   const ch = await char("data", C.request);
   if (!ch) { log("data-request characteristic not found"); return; }
   for (const bytes of [new Uint8Array([id >> 8, id & 0xff]), new Uint8Array([id & 0xff, id >> 8])]) {
-    try { await write(ch, bytes); log(`asked ${hex(bytes)}`); } catch (e) { log(`ask ${hex(bytes)}: ${e.message}`); }
+    try { await write(ch, bytes); log(`asked ${hex(bytes)}`); } catch (e) { log(`ask ${hex(bytes)}: ${why(e)}`); }
     await new Promise(r => setTimeout(r, 800));
   }
 }
@@ -225,7 +227,7 @@ async function engine(start) {
   const ch = await char("remote", C.engine);
   if (!ch) { log("engine-control characteristic not found"); return; }
   try { await write(ch, new Uint8Array([start ? 1 : 0])); log(`${start ? "start" : "stop"} written`); }
-  catch (e) { log(`${start ? "start" : "stop"} refused: ${e.message}`); }
+  catch (e) { log(`${start ? "start" : "stop"} refused: ${why(e)}`); }
   setTimeout(readAll, 3000);
 }
 
