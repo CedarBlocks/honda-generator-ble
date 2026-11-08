@@ -17,12 +17,12 @@ instead of being limited to Honda's phone app and its ~75 ft line-of-sight range
 | Part | State |
 |---|---|
 | Service / characteristic UUIDs | **Confirmed** |
-| Unlock (password) write | **Confirmed** |
-| Engine start / stop write | **Confirmed** |
-| Engine run-state notifications | **Confirmed** |
-| Data message IDs (fuel, output, engine hours, …) | **Confirmed** |
+| Unlock (password) write | **Confirmed on hardware** (EU7000isN: `00000000`) |
+| Engine start / stop write | **Confirmed on hardware** (EU7000isN, 2026-11) |
+| Engine run-state (EU7000isN: 4 bytes, byte 1 = running) | **Confirmed on hardware** |
+| Data message IDs (fuel, output, engine hours, …) | From the app; the EU7000isN has no `01B6…` data service |
 | Exact byte offsets / scaling of each data value | **Needs live-hardware capture** |
-| Role of the panel serial number at the firmware layer | **Open question — see below** |
+| Role of the panel serial number | **App-only ownership check** on the EU7000isN; not needed to unlock |
 
 Everything here was derived by **clean-room documentation of a device's own
 protocol for interoperability**. This repository contains **no** manufacturer source
@@ -93,31 +93,20 @@ The *which-field-is-in-which-byte* mapping and scaling factors are not yet confi
 - BT-unit control `92CD0001-4F59-4599-A73C-C92C4AC7AADE` — used by newer "Z45A"
   generators, which derive the password from a QR code rather than using `00000000`.
 
-## Two generator families — and the QR-code password
+## Two generator families, and the QR code that isn't a password
 
-There are two families, and **which one you have decides your password**:
+- **Classic units**: control on the Remote Control service (`066B…`), factory password `00000000`.
+  **The EU7000isN is one of these**, even though Honda's app makes you scan a QR code to add it.
+- **Z45A / BT-unit units**: also expose a BT-unit service (`92CD…`) and unlock on `92CD0002`. Per the app, these
+  may use a per-unit password; not yet confirmed on hardware.
 
-- **Classic units** — control on the Remote Control service (`066B…`). Factory
-  default password `00000000`.
-- **Z45A / BT-unit units** — control on the BT-unit service (`92CD…`). These ship
-  with a **per-unit password printed beside a QR code** on the generator. During
-  setup Honda's app has you scan that QR (or type the number next to it); the part
-  after the model prefix **is** the unlock password. It is *not* `00000000`.
+The number beside the QR sticker inside the panel is the generator's **serial** (frame number, e.g. `EEJD-…`).
+Honda's app asks for it as an ownership check, but the generator doesn't: on an EU7000isN, the serial as the
+password is refused, and `00000000` unlocks start/stop. Check which family you have with the web tester below: it
+lists the services it finds. The reference client detects the family on connect.
 
-If your generator makes you scan a QR code (or enter the number beside it) to pair,
-you have a Z45A-type unit: use that code as your password. The 9-byte unlock format
-is identical; only the characteristic (`92CD0002` instead of `066B0006`) and the
-password value differ. The reference client auto-detects the family on connect.
-
-### The serial-number step
-
-Separately, owners report Honda's app wants the serial ("frame number") from inside
-the panel. In the app this is an *ownership check* — it reads the serial from the
-device over BLE and also has you enter it, proving you are physically at the machine;
-it does not even compare the two. **Not yet confirmed:** whether the generator
-*firmware* gates engine control on a serial-derived secret, or whether a correct
-unlock is sufficient on its own. Confirming this per model is the top open question —
-please open an issue with your result.
+Finding it: the EU7000isN doesn't advertise its service UUIDs. It shows up named with the model part of its serial
+(`EEJD`), so scan by name, not by service.
 
 ## Try it from a phone
 

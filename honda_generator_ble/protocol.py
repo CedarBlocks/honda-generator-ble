@@ -38,6 +38,10 @@ BT_UNIT_FRAME_NUMBER_CHAR = "92cd0007-4f59-4599-a73c-c92c4ac7aade"
 
 DEFAULT_PASSWORD = "00000000"
 
+# Some units (the EU7000isN, at least) don't advertise their service UUIDs. They show up under the model part
+# of their serial number instead, e.g. "EEJD" for the EU7000is.
+NAME_PREFIXES = ("EEJD",)
+
 # Engine control payloads.
 START = bytes([0x01])
 STOP = bytes([0x00])
@@ -56,6 +60,20 @@ class EngineState(enum.IntEnum):
     STARTING = 1
     RUNNING = 2
     STOPPED = 3
+
+
+def engine_running(data: bytes) -> bool | None:
+    """Whether the engine is running, from an engine-drive-status value.
+
+    The EU7000isN sends 4 bytes and the second is the run flag (``00 01 00 90`` running,
+    ``00 00 00 72`` stopped; the other bytes aren't explained yet). The 1-byte form is
+    :class:`EngineState`.
+    """
+    if not data:
+        return None
+    if len(data) >= 2:
+        return data[1] != 0
+    return data[0] in (EngineState.STARTING, EngineState.RUNNING)
 
 
 # CAN message IDs seen on the data-response characteristic (decimal).

@@ -42,8 +42,8 @@
 
   <section>
     <h2>1. Connect and unlock</h2>
-    <label for="pw">Code beside the QR sticker (older models: 00000000)</label>
-    <input id="pw" maxlength="8" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="8 characters">
+    <label for="pw">Bluetooth password (factory: 00000000; the number by the QR sticker is the serial, not this)</label>
+    <input id="pw" value="00000000" maxlength="8" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="8 characters">
     <div class="hint" id="pwHex"></div>
     <div class="row">
       <button class="primary" id="connect">Find generator</button>
@@ -98,6 +98,8 @@ const C = {
   btuCanFw: U("92cd0006-4f59-4599-a73c-c92c4ac7aade"), btuFrame: U("92cd0007-4f59-4599-a73c-c92c4ac7aade"),
 };
 const STATES = ["waiting", "starting", "running", "stopped"];
+// EU7000isN: 4 bytes, byte 1 = running. The 1-byte form is the app's documented one.
+const stateText = v => v.byteLength >= 2 ? (v.getUint8(1) ? "running" : "stopped") : (STATES[v.getUint8(0)] || `code ${v.getUint8(0)}`);
 const CAN_IDS = { "ECU status 0x312": 0x312, "Inverter status 0x322": 0x322, "Inverter info 0x332": 0x332,
                   "Hours 0x352": 0x352, "Fuel 0x362": 0x362, "Output setting 0x5D2": 0x5d2 };
 const $ = id => document.getElementById(id);
@@ -142,7 +144,7 @@ async function connect(all) {
   try {
     const opts = { optionalServices: Object.values(S) };
     if (all) opts.acceptAllDevices = true;
-    else opts.filters = [{ services: [S.remote] }, { services: [S.btu] }];
+    else opts.filters = [{ services: [S.remote] }, { services: [S.btu] }, { namePrefix: "EEJD" }];
     const dev = await navigator.bluetooth.requestDevice(opts);
     log(`picked ${dev.name || "(no name)"} ${dev.id || ""}`);
     dev.addEventListener("gattserverdisconnected", () => { log("disconnected"); setReady(false); server = null; });
@@ -184,7 +186,7 @@ async function readOne(service, id, label, asText) {
 
 async function readAll() {
   const v = await readOne("remote", C.drive, "engine state");
-  if (v && v.byteLength) $("state").textContent = STATES[v.getUint8(0)] || `code ${v.getUint8(0)}`;
+  if (v && v.byteLength) $("state").textContent = stateText(v);
   await readOne("remote", C.frame, "frame number (classic)", true);
   await readOne("btu", C.btuFrame, "frame number (BT unit)", true);
   await readOne("btu", C.btuFw, "BT firmware", true);
@@ -201,7 +203,7 @@ async function listen() {
     const on = e => {
       const v = e.target.value;
       log(`${label} ${hex(v)}`);
-      if (label === "drive" && v.byteLength) $("state").textContent = STATES[v.getUint8(0)] || `code ${v.getUint8(0)}`;
+      if (label === "drive" && v.byteLength) $("state").textContent = stateText(v);
     };
     try { ch.addEventListener("characteristicvaluechanged", on); await ch.startNotifications(); subs.push([ch, on]); log(`listening: ${label}`); }
     catch (e) { log(`listen ${label}: ${why(e)}`); }

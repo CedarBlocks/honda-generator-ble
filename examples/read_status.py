@@ -6,12 +6,12 @@ some units), reads the serial, and watches engine run-state for a few seconds.
 Usage:
     pip install bleak
     python examples/read_status.py                 # default password 00000000
-    python examples/read_status.py 12345678        # Z45A code beside the QR
+    python examples/read_status.py 12345678        # a changed password
 """
 import asyncio
 import sys
 
-from honda_generator_ble import GeneratorClient, EngineState
+from honda_generator_ble import GeneratorClient
 
 
 async def main(password: str) -> None:
@@ -35,9 +35,11 @@ async def main(password: str) -> None:
         except Exception as exc:  # noqa: BLE001 - informational only
             print(f"(could not read serial: {exc})")
 
+        running = await gen.is_running()
+        print(f"Engine: {'running' if running else 'stopped' if running is not None else 'unknown'}")
         print("Watching engine state for 10s (Ctrl-C to stop)...")
         await gen.watch_engine_state(
-            lambda state: print(f"  engine: {state.name if isinstance(state, EngineState) else state}")
+            lambda running, raw: print(f"  engine: {'running' if running else 'stopped'} ({raw.hex(' ')})")
         )
         await asyncio.sleep(10)
 

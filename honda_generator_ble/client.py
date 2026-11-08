@@ -76,12 +76,14 @@ class GeneratorClient:
     # -- discovery -----------------------------------------------------------
     @staticmethod
     async def discover(timeout: float = 10.0) -> list[BLEDevice]:
-        """Return BLE devices that expose a Honda generator control service."""
+        """Return BLE devices that look like a Honda generator: advertising a control service, or named with a
+        known model prefix (many units don't advertise their services)."""
         found: list[BLEDevice] = []
         devices = await BleakScanner.discover(timeout=timeout, return_adv=True)
         for dev, adv in devices.values():
             uuids = {u.lower() for u in (adv.service_uuids or [])}
-            if P.REMOTE_CONTROL_SERVICE in uuids or P.BT_UNIT_SERVICE in uuids:
+            name = adv.local_name or dev.name or ""
+            if P.REMOTE_CONTROL_SERVICE in uuids or P.BT_UNIT_SERVICE in uuids or name.startswith(P.NAME_PREFIXES):
                 found.append(dev)
         return found
 
@@ -142,19 +144,22 @@ class GeneratorClient:
         raw = await self._client.read_gatt_char(self._profile.frame_char)
         return raw.decode("ascii", errors="replace").strip("\x00").strip()
 
+    async def is_running(self) -> bool | None:
+        """Read the engine-drive-status characteristic once."""
+        self._require_connected()
+        return P.engine_running(bytes(await self._client.read_gatt_char(self._profile.status_char)))
+
     async def watch_engine_state(self, callback) -> None:
         """Subscribe to engine run-state changes.
 
-        ``callback`` is called with a :class:`protocol.EngineState` on each update.
+        ``callback`` is called with ``(running, raw_bytes)`` on each update; ``running`` is a bool
+        (see :func:`protocol.engine_running`).
         """
         self._require_connected()
 
         def _handler(_sender, data: bytearray) -> None:
             if data:
-                try:
-                    callback(P.EngineState(data[0]))
-                except ValueError:
-                    callback(data[0])
+                callback(P.engine_running(bytes(data)), bytes(data))
 
         await self._client.start_notify(self._profile.status_char, _handler)
 

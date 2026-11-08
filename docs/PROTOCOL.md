@@ -23,6 +23,10 @@ Base UUID suffix: `-5D90-4939-A7BA-7B9222F53E81`
 | Unlock / password | `066B0006-…` | write | authenticate (§2) |
 | Change password | `066B0007-…` | write | set a new owner password |
 
+Finding the device: the EU7000isN doesn't advertise these service UUIDs; it's named with the model part of its
+serial (`EEJD`). On that model, `066B0005` (frame number) reads as ASCII with null padding, and the Diagnostic
+service is present (firmware version `B4EF0004` reads `10 04`), but the Generator Data service below is **absent**.
+
 ### 1.2 Generator Data service
 
 Base UUID suffix: `-875A-4C56-B8BF-5103CAFAEEC7`
@@ -74,12 +78,11 @@ byte 0    : permission   0x01 owner, 0x02 guest, 0x03 reset
 bytes 1-8 : password, 8 ASCII characters (e.g. "00000000" -> 30 30 30 30 30 30 30 30)
 ```
 
-- Factory default password (classic units): `00000000`.
-- **Z45A / BT-unit units** instead have a per-unit password printed beside a QR code
-  on the generator. The QR encodes a model prefix plus the password; the password
-  portion (8 characters) goes in bytes 1-8, written to `92CD0002` rather than
-  `066B0006`. The format is otherwise identical. Scanning the QR in Honda's app and
-  typing the code beside it are equivalent.
+- Factory default password (classic units): `00000000`. **Confirmed on an EU7000isN**: `00000000` unlocks
+  start/stop, and the serial printed beside the QR sticker does not.
+- **Z45A / BT-unit units** (with the `92CD…` service) unlock on `92CD0002` instead; the app suggests a per-unit
+  password there. Not yet confirmed on hardware.
+- A wrong password is still *accepted* as a write. You only find out when the next reads and writes fail.
 - For a `reset` (permission `0x03`) the password field is instead a 3-byte big-endian
   integer parsed from a hex string (reset code), not ASCII.
 - Passwords shorter than 8 characters fill only the leading bytes; the rest stay `00`.
@@ -97,8 +100,17 @@ characteristic (`066B0007` / `92CD0003`) after unlocking as owner.
 - **Start:** write `01` to the engine-control characteristic.
 - **Stop:** write `00`.
 
-Run-state notifications arrive on the engine-drive-status characteristic as a single
-byte:
+Both confirmed on an EU7000isN (unlock first).
+
+**EU7000isN engine-drive-status: 4 bytes, readable and indicated.** Byte 1 is the run flag:
+
+| Raw | Meaning |
+|---|---|
+| `00 01 00 90` | running (still `01` for a few seconds while it spins down) |
+| `00 00 00 72` | stopped |
+
+Bytes 0, 2 and 3 aren't explained yet (byte 3 changed between reads). The app's 1-byte form, possibly other
+models:
 
 | Value | Meaning |
 |---|---|
@@ -154,7 +166,5 @@ serial from the device over BLE (`066B0005`) but does not compare it to the ente
 value — it simply stores the entered one and uses the serial's prefix to pick a model
 profile. This reads as an *ownership / anti-theft* step enforced by the app.
 
-**Unverified:** whether the generator firmware itself gates engine control on a
-serial-derived secret. On classic models the control gate appears to be the unlock
-password alone. Confirming this on real hardware is the top open question; please
-report results with your model number.
+**Confirmed on an EU7000isN:** the firmware doesn't use the serial. The unlock password (`00000000`) alone
+enables start/stop. Reports from other models are welcome.
