@@ -45,8 +45,8 @@ BLE GATT. All multi-byte CAN message IDs below are shown in decimal and hex.
 |---|---|---|
 | Unlock / password | `066B0006-…F53E81` | Write 9 bytes to authenticate (see below) |
 | **Engine control** | `066B0002-…F53E81` | Write `0x01` = start, `0x00` = stop |
-| Engine drive status | `066B0003-…F53E81` | Notify: `0`=waiting `1`=starting `2`=running `3`=stopped |
-| Control-sequence config | `066B0004-…F53E81` | notify config |
+| Engine drive status | `066B0003-…F53E81` | Read/indicate; on the EU7000isN 4 bytes, byte 1 = running (see PROTOCOL.md §3) |
+| Control-sequence config | `066B0004-…F53E81` | Read/write; reads `02 3C 28 28 3C` on an EU7000isN (meaning unknown) |
 | Frame (serial) number | `066B0005-…F53E81` | Read the generator's own serial |
 | Change password | `066B0007-…F53E81` | Write a new owner password |
 
@@ -105,8 +105,9 @@ Honda's app asks for it as an ownership check, but the generator doesn't: on an 
 password is refused, and `00000000` unlocks start/stop. Check which family you have with the web tester below: it
 lists the services it finds. The reference client detects the family on connect.
 
-Finding it: the EU7000isN doesn't advertise its service UUIDs. It shows up named with the model part of its serial
-(`EEJD`), so scan by name, not by service.
+Finding it: the EU7000isN shows up named with the model part of its serial (`EEJD`), so scan by name. Its service
+UUID didn't show in a Web Bluetooth scan, though an iOS BLE app lists `066B0001` as advertised. Values read from each
+characteristic on an EU7000isN are in `docs/PROTOCOL.md` §1.1.
 
 ## Try it from a phone
 

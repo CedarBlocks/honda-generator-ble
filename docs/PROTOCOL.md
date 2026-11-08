@@ -17,15 +17,33 @@ Base UUID suffix: `-5D90-4939-A7BA-7B9222F53E81`
 |---|---|---|---|
 | Remote Control service | `066B0001-…` | — | container |
 | Engine control | `066B0002-…` | write | `01`=start, `00`=stop |
-| Engine drive status | `066B0003-…` | notify | engine run-state (§3) |
-| Control-sequence config | `066B0004-…` | notify/write | sequence config |
-| Frame (serial) number | `066B0005-…` | read | device serial string |
+| Engine drive status | `066B0003-…` | read/indicate | engine run-state (§3) |
+| Control-sequence config | `066B0004-…` | read/write (EU7000isN) | sequence config |
+| Frame (serial) number | `066B0005-…` | read/write (EU7000isN) | device serial string |
 | Unlock / password | `066B0006-…` | write | authenticate (§2) |
 | Change password | `066B0007-…` | write | set a new owner password |
 
-Finding the device: the EU7000isN doesn't advertise these service UUIDs; it's named with the model part of its
-serial (`EEJD`). On that model, `066B0005` (frame number) reads as ASCII with null padding, and the Diagnostic
-service is present (firmware version `B4EF0004` reads `10 04`), but the Generator Data service below is **absent**.
+Finding the device: it's named with the model part of its serial (`EEJD`), so scan by name. A Web Bluetooth scan
+showed no service UUIDs in its advertisement, but an iOS BLE app lists `066B0001` as an advertised service (probably
+in the scan response), so a scan filtered on `066B0001` may also work. The Generator Data service below is **absent**
+on this model; the Diagnostic service is present.
+
+**EU7000isN, as read with an iOS BLE app (engine stopped, unlocked earlier that day):**
+
+| Characteristic | Properties seen | Value read | Notes |
+|---|---|---|---|
+| `066B0002` | write | — | start/stop (§3) |
+| `066B0003` | read, indicate | `00 00 00 72` | stopped (§3) |
+| `066B0004` | read, write | `02 3C 28 28 3C` | 5 bytes; meaning unknown (`3C` = 60, `28` = 40: timings?). Unchanged meaning untested; don't write it. |
+| `066B0005` | read, write | ASCII serial + 5 null bytes (17 bytes) | e.g. `EEJD-xxxxxxx`; readable by anyone in range |
+| `066B0006` | write | — | unlock (§2) |
+| `066B0007` | read, write | `00` | the change-password characteristic reads `00` |
+| `B4EF0002` | write | — | diagnostic command |
+| `B4EF0003` | indicate | `80 01` + ASCII `BB42FF06` + `04` | diagnostic response; meaning unknown |
+| `B4EF0004` | read | `10 04` | firmware version |
+| `B4EF0005` | write | — | unit operation |
+
+Still to try: read `066B0004` and `066B0007` again while the engine runs, to see if either is live data.
 
 ### 1.2 Generator Data service
 
