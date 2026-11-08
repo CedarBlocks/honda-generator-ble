@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generator BLE tester</title>
+<style>
+  :root { --bg: #f6f7f4; --card: #fff; --ink: #1d2320; --ink2: #5b645f; --line: #d9ddd8; --accent: #1f6f4a;
+          --danger: #b3261e; --mono: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121614; --card: #1b201d; --ink: #e8ece9; --ink2: #9aa49e; --line: #2c3430; --accent: #5cc493; --danger: #ff8a80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 -apple-system, system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.35rem; margin: 8px 0 4px; }
+  p { color: var(--ink2); margin: 0 0 12px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 12px 0; }
+  h2 { font-size: 1rem; margin: 0 0 8px; }
+  label { display: block; font-size: .9rem; color: var(--ink2); margin-bottom: 4px; }
+  input { width: 100%; font: 18px var(--mono); padding: 10px; border: 1px solid var(--line); border-radius: 8px;
+          background: var(--bg); color: var(--ink); letter-spacing: .08em; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  button { font: inherit; font-weight: 600; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line);
+           background: var(--bg); color: var(--ink); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { color: var(--danger); border-color: var(--danger); }
+  button:disabled { opacity: .45; }
+  .hint { font-size: .85rem; color: var(--ink2); margin-top: 6px; font-family: var(--mono); word-break: break-all; }
+  #state { font-weight: 700; }
+  pre { font: 12px/1.5 var(--mono); white-space: pre-wrap; word-break: break-all; max-height: 50vh; overflow: auto;
+        margin: 0; color: var(--ink); }
+  details summary { cursor: pointer; color: var(--ink2); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Generator Bluetooth tester</h1>
+  <p>Talks to a Honda generator with Bluetooth (My Generator app models) straight from this page, using the protocol in
+    <a href="https://github.com/CedarBlocks/honda-generator-ble/blob/main/docs/PROTOCOL.md">PROTOCOL.md</a>. On iPhone, open it in the <b>Bluefy</b> browser; on Android or a computer, in Chrome.
+    Close Honda's app first: the generator takes one connection at a time. Your code never leaves this page.</p>
+
+  <section>
+    <h2>1. Connect and unlock</h2>
+    <label for="pw">Code beside the QR sticker (older models: 00000000)</label>
+    <input id="pw" maxlength="8" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="8 characters">
+    <div class="hint" id="pwHex"></div>
+    <div class="row">
+      <button class="primary" id="connect">Find generator</button>
+      <button id="connectAll">Show all devices</button>
+      <button id="unlock" disabled>Unlock</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Read</h2>
+    <div>Engine: <span id="state">–</span></div>
+    <div class="row">
+      <button id="read" disabled>Read state, serial, versions</button>
+      <button id="listen" disabled>Capture data 20 s</button>
+    </div>
+    <details style="margin-top:10px"><summary>Ask for a data message</summary>
+      <p style="margin-top:8px">The data-request format isn't confirmed yet. Each button tries a CAN ID two ways; the log shows any answer.</p>
+      <div class="row" id="asks"></div>
+    </details>
+  </section>
+
+  <section>
+    <h2>3. Start / stop</h2>
+    <p>Only when you're standing at the generator with its exhaust vented.</p>
+    <div class="row">
+      <button id="start" disabled>Start</button>
+      <button class="danger" id="stop" disabled>Stop</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="row" style="margin:0 0 8px;justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Log</h2><button id="copy">Copy log</button>
+    </div>
+    <pre id="log"></pre>
+  </section>
+</main>
+<script>
+"use strict";
+const U = s => s.toLowerCase();
+const S = {
+  remote: U("066b0001-5d90-4939-a7ba-7b9222f53e81"), data: U("01b60001-875a-4c56-b8bf-5103cafaeec7"),
+  diag: U("b4ef0001-62d2-483c-8293-119e2a99a82b"), btu: U("92cd0001-4f59-4599-a73c-c92c4ac7aade"),
+};
+const C = {
+  engine: U("066b0002-5d90-4939-a7ba-7b9222f53e81"), drive: U("066b0003-5d90-4939-a7ba-7b9222f53e81"),
+  frame: U("066b0005-5d90-4939-a7ba-7b9222f53e81"), unlock: U("066b0006-5d90-4939-a7ba-7b9222f53e81"),
+  request: U("01b60002-875a-4c56-b8bf-5103cafaeec7"), response: U("01b60003-875a-4c56-b8bf-5103cafaeec7"),
+  drip: U("01b60004-875a-4c56-b8bf-5103cafaeec7"), errors: U("01b60005-875a-4c56-b8bf-5103cafaeec7"),
+  fw: U("b4ef0004-62d2-483c-8293-119e2a99a82b"),
+  btuUnlock: U("92cd0002-4f59-4599-a73c-c92c4ac7aade"), btuFw: U("92cd0005-4f59-4599-a73c-c92c4ac7aade"),
+  btuCanFw: U("92cd0006-4f59-4599-a73c-c92c4ac7aade"), btuFrame: U("92cd0007-4f59-4599-a73c-c92c4ac7aade"),
+};
+const STATES = ["waiting", "starting", "running", "stopped"];
+const CAN_IDS = { "ECU status 0x312": 0x312, "Inverter status 0x322": 0x322, "Inverter info 0x332": 0x332,
+                  "Hours 0x352": 0x352, "Fuel 0x362": 0x362, "Output setting 0x5D2": 0x5d2 };
+const $ = id => document.getElementById(id);
+let server = null, svc = {};
+
+const hex = buf => [...new Uint8Array(buf.buffer || buf)].map(b => b.toString(16).padStart(2, "0")).join(" ");
+const text = buf => { try { return new TextDecoder().decode(buf); } catch { return ""; } };
+function log(msg) {
+  const t = new Date().toLocaleTimeString([], { hour12: false });
+  $("log").textContent += `${t}  ${msg}\n`;
+  $("log").scrollTop = 1e9;
+}
+function unlockBytes() {
+  const pw = $("pw").value.trim();
+  const out = new Uint8Array(9);
+  out[0] = 0x01;
+  for (let i = 0; i < Math.min(8, pw.length); i++) out[1 + i] = pw.charCodeAt(i) & 0xff;
+  return out;
+}
+$("pw").addEventListener("input", () => {
+  const n = $("pw").value.trim().length;
+  $("pwHex").textContent = n ? `${hex(unlockBytes())}${n !== 8 ? `  (${n} of 8 characters)` : ""}` : "";
+});
+
+async function char(service, id) {
+  if (!svc[service]) return null;
+  try { return await svc[service].getCharacteristic(id); } catch { return null; }
+}
+async function write(ch, bytes) {
+  if (ch.writeValueWithResponse) return ch.writeValueWithResponse(bytes);
+  return ch.writeValue(bytes);
+}
+function setReady(on) {
+  for (const id of ["unlock", "read", "listen", "start", "stop"]) $(id).disabled = !on;
+  document.querySelectorAll("#asks button").forEach(b => b.disabled = !on);
+}
+
+async function connect(all) {
+  if (!navigator.bluetooth) { log("This browser has no Web Bluetooth. On iPhone use the Bluefy app; elsewhere Chrome."); return; }
+  try {
+    const opts = { optionalServices: Object.values(S) };
+    if (all) opts.acceptAllDevices = true;
+    else opts.filters = [{ services: [S.remote] }, { services: [S.btu] }];
+    const dev = await navigator.bluetooth.requestDevice(opts);
+    log(`picked ${dev.name || "(no name)"} ${dev.id || ""}`);
+    dev.addEventListener("gattserverdisconnected", () => { log("disconnected"); setReady(false); server = null; });
+    server = await dev.gatt.connect();
+    log("connected");
+    svc = {};
+    for (const [name, id] of Object.entries(S)) {
+      try { svc[name] = await server.getPrimaryService(id); log(`service ${name} ${id.slice(0, 8)}: yes`); }
+      catch { log(`service ${name} ${id.slice(0, 8)}: no`); }
+    }
+    for (const [name, s] of Object.entries(svc)) {
+      try {
+        const chars = await s.getCharacteristics();
+        log(`  ${name}: ` + chars.map(c => {
+          const p = c.properties;
+          return c.uuid.slice(0, 8) + "[" + ["read", "write", "writeWithoutResponse", "notify", "indicate"].filter(k => p[k]).map(k => k[0] + (k === "writeWithoutResponse" ? "n" : "")).join("") + "]";
+        }).join(" "));
+      } catch (e) { log(`  ${name}: couldn't list (${e.message})`); }
+    }
+    setReady(true);
+    log(svc.btu ? "BT-unit (Z45A) model: unlock uses 92CD0002" : "classic model: unlock uses 066B0006");
+  } catch (e) { log(`connect: ${e.message}`); }
+}
+
+async function unlock() {
+  const ch = svc.btu ? await char("btu", C.btuUnlock) : await char("remote", C.unlock);
+  if (!ch) { log("unlock characteristic not found"); return; }
+  const bytes = unlockBytes();
+  try { await write(ch, bytes); log(`unlock written (${hex(bytes).slice(0, 2)} + code): accepted, no error`); }
+  catch (e) { log(`unlock refused: ${e.message}`); }
+}
+
+async function readOne(service, id, label, asText) {
+  const ch = await char(service, id);
+  if (!ch) return;
+  try { const v = await ch.readValue(); log(`${label}: ${hex(v)}${asText ? `  "${text(v)}"` : ""}`); return v; }
+  catch (e) { log(`${label}: read failed (${e.message})`); }
+}
+
+async function readAll() {
+  const v = await readOne("remote", C.drive, "engine state");
+  if (v && v.byteLength) $("state").textContent = STATES[v.getUint8(0)] || `code ${v.getUint8(0)}`;
+  await readOne("remote", C.frame, "frame number (classic)", true);
+  await readOne("btu", C.btuFrame, "frame number (BT unit)", true);
+  await readOne("btu", C.btuFw, "BT firmware", true);
+  await readOne("btu", C.btuCanFw, "CAN firmware", true);
+  await readOne("diag", C.fw, "firmware", true);
+}
+
+async function listen() {
+  const subs = [];
+  for (const [label, service, id] of [["drive", "remote", C.drive], ["response", "data", C.response],
+                                       ["drip", "data", C.drip], ["errors", "data", C.errors]]) {
+    const ch = await char(service, id);
+    if (!ch || !(ch.properties.notify || ch.properties.indicate)) continue;
+    const on = e => {
+      const v = e.target.value;
+      log(`${label} ${hex(v)}`);
+      if (label === "drive" && v.byteLength) $("state").textContent = STATES[v.getUint8(0)] || `code ${v.getUint8(0)}`;
+    };
+    try { ch.addEventListener("characteristicvaluechanged", on); await ch.startNotifications(); subs.push([ch, on]); log(`listening: ${label}`); }
+    catch (e) { log(`listen ${label}: ${e.message}`); }
+  }
+  $("listen").disabled = true;
+  await new Promise(r => setTimeout(r, 20000));
+  for (const [ch, on] of subs) { try { await ch.stopNotifications(); } catch {} ch.removeEventListener("characteristicvaluechanged", on); }
+  $("listen").disabled = !server;
+  log("capture done");
+}
+
+async function ask(id) {
+  const ch = await char("data", C.request);
+  if (!ch) { log("data-request characteristic not found"); return; }
+  for (const bytes of [new Uint8Array([id >> 8, id & 0xff]), new Uint8Array([id & 0xff, id >> 8])]) {
+    try { await write(ch, bytes); log(`asked ${hex(bytes)}`); } catch (e) { log(`ask ${hex(bytes)}: ${e.message}`); }
+    await new Promise(r => setTimeout(r, 800));
+  }
+}
+
+async function engine(start) {
+  if (start && !confirm("Start the generator now? Only with its exhaust vented and you standing there.")) return;
+  const ch = await char("remote", C.engine);
+  if (!ch) { log("engine-control characteristic not found"); return; }
+  try { await write(ch, new Uint8Array([start ? 1 : 0])); log(`${start ? "start" : "stop"} written`); }
+  catch (e) { log(`${start ? "start" : "stop"} refused: ${e.message}`); }
+  setTimeout(readAll, 3000);
+}
+
+for (const [label, id] of Object.entries(CAN_IDS)) {
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.disabled = true;
+  b.onclick = () => ask(id);
+  $("asks").appendChild(b);
+}
+$("connect").onclick = () => connect(false);
+$("connectAll").onclick = () => connect(true);
+$("unlock").onclick = unlock;
+$("read").onclick = readAll;
+$("listen").onclick = listen;
+$("start").onclick = () => engine(true);
+$("stop").onclick = () => engine(false);
+$("copy").onclick = async () => {
+  try { await navigator.clipboard.writeText($("log").textContent); log("log copied"); }
+  catch { log("copy failed: select the log text and copy it by hand"); }
+};
+log(navigator.bluetooth ? "ready" : "no Web Bluetooth in this browser: on iPhone use Bluefy");
+</script>
+</body>
+</html>

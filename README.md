@@ -119,6 +119,12 @@ it does not even compare the two. **Not yet confirmed:** whether the generator
 unlock is sufficient on its own. Confirming this per model is the top open question —
 please open an issue with your result.
 
+## Try it from a phone
+
+[**Web tester**](https://cedarblocks.github.io/honda-generator-ble/tester/): connect, unlock, read the engine state and
+capture data frames from the browser (iPhone: the Bluefy app; Android/desktop: Chrome). Copy the log into an issue to
+help pin down the telemetry fields.
+
 ## Python reference client
 
 ```bash
